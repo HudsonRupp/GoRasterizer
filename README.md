@@ -14,4 +14,7 @@ To run:
 go run . obj/teapot.obj
 ```
 
-- WASD to move forward/back + left/right, Q/E to move up/down 
+- WASD to move camera forward/back + left/right, Q/E to move camera up/down 
+
+## Preview
+<img width="828" height="716" alt="image" src="https://github.com/user-attachments/assets/22a59233-8e00-4fdc-affd-bf1b41201f0d" />
