@@ -18,35 +18,70 @@ type Game struct {
 	camera     *Camera
 	buffer     *image.RGBA
 	offscreen  *ebiten.Image
-	keys       []ebiten.Key
+	meshes     []*Mesh
 }
 
-func NewGame(r *Rasterizer, width int, height int) *Game {
+func NewGame(r *Rasterizer, width int, height int, meshes []*Mesh) *Game {
 	return &Game{
 		rasterizer: r,
-		camera:     NewCamera(90, 0.1, 100, width, height),
+		camera:     NewCamera(85, 0.1, 100, width, height),
 		buffer:     image.NewRGBA(image.Rect(0, 0, width, height)),
 		offscreen:  ebiten.NewImage(width, height),
+		meshes:     meshes,
 	}
 }
 
 func (g *Game) Update() error {
 	moved := false
+	translateSpeed := 0.1
+	/*
+		rotateSpeed := 2.0 // deg/frame
 
+		//Rotation
+		if ebiten.IsKeyPressed(ebiten.KeyLeft) {
+			g.camera.Rotate(-rotateSpeed, 0)
+			moved = true
+		}
+		if ebiten.IsKeyPressed(ebiten.KeyRight) {
+			g.camera.Rotate(rotateSpeed, 0)
+			moved = true
+		}
+		if ebiten.IsKeyPressed(ebiten.KeyUp) {
+			g.camera.Rotate(0, rotateSpeed)
+			moved = true
+		}
+		if ebiten.IsKeyPressed(ebiten.KeyDown) {
+			g.camera.Rotate(0, rotateSpeed)
+			moved = true
+		}
+
+		forward := g.camera.Target.Sub(g.camera.Position).Normalized()
+		right := (Vec3{X: 0, Y: 1, Z: 0}).Cross(forward).Normalized()
+	*/
+
+	//Translation
 	if ebiten.IsKeyPressed(ebiten.KeyW) {
-		g.camera.Translate(Vec3{0, 0, -0.1})
+		g.camera.Translate(Vec3{0, 0, -translateSpeed})
 		moved = true
 	}
 	if ebiten.IsKeyPressed(ebiten.KeyA) {
-		g.camera.Translate(Vec3{-0.1, 0, 0})
+		g.camera.Translate(Vec3{-translateSpeed, 0, 0})
 		moved = true
 	}
 	if ebiten.IsKeyPressed(ebiten.KeyS) {
-		g.camera.Translate(Vec3{0, 0, 0.1})
+		g.camera.Translate(Vec3{0, 0, translateSpeed})
 		moved = true
 	}
 	if ebiten.IsKeyPressed(ebiten.KeyD) {
-		g.camera.Translate(Vec3{0.1, 0, 0})
+		g.camera.Translate(Vec3{translateSpeed, 0, 0})
+		moved = true
+	}
+	if ebiten.IsKeyPressed(ebiten.KeyQ) {
+		g.camera.Translate(Vec3{0, translateSpeed, 0})
+		moved = true
+	}
+	if ebiten.IsKeyPressed(ebiten.KeyE) {
+		g.camera.Translate(Vec3{0, -translateSpeed, 0})
 		moved = true
 	}
 
@@ -58,17 +93,16 @@ func (g *Game) Update() error {
 
 func (g *Game) Draw(screen *ebiten.Image) {
 
-	g.rasterizer.Render(g.buffer, g.camera)
+	g.rasterizer.Render(g.buffer, g.camera, g.meshes)
 	g.offscreen.WritePixels(g.buffer.Pix) // Copy buffer to ebiten.Image
-	screen.DrawImage(g.offscreen, nil)    // Draw image
+	screen.DrawImage(g.offscreen, nil)
 	m := fmt.Sprintf("TPS: %.2f, FPS: %.2f, CAM: %v, LOOKAT: %v", ebiten.ActualTPS(), ebiten.ActualFPS(), g.camera.Position, g.camera.Target)
 	ebitenutil.DebugPrint(screen, m)
 	//ebitenutil.DebugPrintAt(screen, fmt.Sprintf("Width: %v, Height: %v", g.camera.Width, g.camera.Height), 0, 10)
 }
 
 func (g *Game) Layout(outsideWidth, outsideHeight int) (screenWidth, screenHeight int) {
-	//return outsideWidth, outsideHeight
-	return 720, 720
+	return g.camera.Width, g.camera.Height
 }
 
 func Run(game *Game) {

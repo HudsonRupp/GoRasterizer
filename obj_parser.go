@@ -1,47 +1,70 @@
 package main
 
 import (
-	"log"
+	"bufio"
 	"os"
 	"strconv"
 	"strings"
 )
 
-func Parse_OBJ(filename string) {
-	bytes, err := os.ReadFile(filename)
+func Parse_OBJ(filename string) (*Mesh, error) {
+	file, err := os.Open(filename)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
+	defer file.Close()
 
-	file_string := string(bytes)
-	lines := strings.Split(file_string, "\n")
+	mesh := &Mesh{}
 
-	var vertices []Vec3
+	scanner := bufio.NewScanner(file)
 
-	for i := 0; i < len(lines); i++ {
-		log.Printf("%v", lines[i])
-		if lines[i][0] == '#' || lines[i][0] == 'g' {
-			// Comment or group (ignore FOR NOW)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
 
-		} else if lines[i][0] == 'f' {
-			// face definition
-
-		} else if lines[i][0] == 'v' {
-			if lines[i][1] == 't' {
-				// texture coordinates
-			} else if lines[i][1] == 'n' {
-				// normal definition
-
-			} else {
-				// Vertex definition
-				coords := strings.Split(lines[i][2:], " ")
-				x, _ := strconv.ParseFloat(coords[0], 64)
-				y, _ := strconv.ParseFloat(coords[1], 64)
-				z, _ := strconv.ParseFloat(coords[2], 64)
-				vertices = append(vertices, Vec3{X: x, Y: y, Z: z})
-			}
+		if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, "g") {
+			continue
 		}
 
+		fields := strings.Fields(line)
+		if len(fields) == 0 {
+			continue
+		}
+
+		prefix := fields[0]
+
+		if prefix == "v" {
+			x, _ := strconv.ParseFloat(fields[1], 64)
+			y, _ := strconv.ParseFloat(fields[2], 64)
+			z, _ := strconv.ParseFloat(fields[3], 64)
+			mesh.Vertices = append(mesh.Vertices, Vec3{X: x, Y: y, Z: z})
+		} else if prefix == "f" {
+			var faceIndices []int
+
+			for _, fStr := range fields[1:] {
+				parts := strings.Split(fStr, "/")
+				// Just want vertex for now, skip /vt/vn
+				idx, err := strconv.Atoi(parts[0])
+				if err == nil {
+					faceIndices = append(faceIndices, idx-1)
+				}
+			}
+
+			// Triangle Fan for > 3 vertices
+			for i := 1; i < len(faceIndices)-1; i++ {
+				tri := [3]int{
+					faceIndices[0],
+					faceIndices[i],
+					faceIndices[i+1],
+				}
+				mesh.Faces = append(mesh.Faces, tri)
+			}
+		}
 	}
+
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+
+	return mesh, nil
 
 }

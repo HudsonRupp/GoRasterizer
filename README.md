@@ -11,5 +11,7 @@ export GOOS=windows
 
 To run:
 ```bash
-go run .
+go run . obj/teapot.obj
 ```
+
+- WASD to move forward/back + left/right, Q/E to move up/down 

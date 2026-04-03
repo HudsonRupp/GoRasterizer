@@ -5,6 +5,7 @@ import "math"
 type Camera struct {
 	Position               Vec3
 	Target                 Vec3
+	Yaw, Pitch             float64
 	FOV, NearClip, FarClip float64
 	Width, Height          int
 
@@ -13,8 +14,9 @@ type Camera struct {
 
 func NewCamera(fov, nearClip, farClip float64, width, height int) *Camera {
 	cam := &Camera{
-		Position: Vec3{X: 0, Y: 0, Z: 0},
-		Target:   Vec3{X: 0, Y: 0, Z: -5},
+		Position: Vec3{X: 0, Y: 0, Z: 5},
+		Yaw:      -90.0,
+		Pitch:    0.0,
 		FOV:      fov,
 		NearClip: nearClip,
 		FarClip:  farClip,
@@ -30,7 +32,33 @@ func (c *Camera) Translate(d Vec3) {
 	c.Target = c.Target.Add(d)
 }
 
+func (c *Camera) Rotate(dYaw, dPitch float64) {
+	c.Yaw += dYaw
+	c.Pitch += dPitch
+
+	if c.Pitch > 89.0 {
+		c.Pitch = 89.0
+	}
+	if c.Pitch < -89.0 {
+		c.Pitch = -89.0
+	}
+
+	c.UpdateDirection()
+}
+func (c *Camera) UpdateDirection() {
+	yawRad := c.Yaw * (math.Pi / 180.0)
+	pitchRad := c.Pitch * (math.Pi / 180.0)
+
+	forward := Vec3{
+		X: math.Cos(yawRad) * math.Cos(pitchRad),
+		Y: math.Sin(pitchRad),
+		Z: math.Sin(yawRad) * math.Cos(pitchRad),
+	}
+
+	c.Target = c.Position.Add(forward)
+}
 func (c *Camera) Update() {
+	//c.UpdateDirection()
 	viewMatrix := c.getCameraMatrix()
 	projMatrix := c.getProjMatrix()
 
@@ -57,7 +85,8 @@ func (c *Camera) getCameraMatrix() Mat4 {
 func (c *Camera) getProjMatrix() Mat4 {
 	m := Mat4{}
 	aspectRatio := float64(c.Width) / float64(c.Height)
-	top := math.Tan(c.FOV/2) * c.NearClip
+	fovRad := c.FOV * (math.Pi / 180.0)
+	top := math.Tan(fovRad/2) * c.NearClip
 	bottom := -top
 	right := top * aspectRatio
 	left := bottom
@@ -69,12 +98,5 @@ func (c *Camera) getProjMatrix() Mat4 {
 	m[2][3] = -1
 	m[3][2] = -(2 * c.FarClip * c.NearClip) / (c.FarClip - c.NearClip)
 
-	/*scale := 1 / math.Tan(c.FOV*0.5*math.Pi/180)
-	m[0][0] = scale                                              // scale x
-	m[1][1] = scale                                              // scale y
-	m[2][2] = -c.FarClip / (c.FarClip - c.NearClip)              // remap z [0,1]
-	m[3][2] = -c.FarClip * c.NearClip / (c.FarClip - c.NearClip) // remap z [0, 1]
-	m[2][3] = -1                                                 // w = -z
-	*/
 	return m
 }

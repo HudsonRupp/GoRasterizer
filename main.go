@@ -12,13 +12,22 @@ func main() {
 	log.Println("Starting...")
 
 	log.Println(os.Args)
+	var mesh *Mesh
+	var err error
 	if len(os.Args) > 1 {
-		Parse_OBJ(os.Args[1])
+		mesh, err = Parse_OBJ(os.Args[1])
+	} else {
+		mesh = TestQuad()
 	}
 
-	engine := NewRasterizer(720, 720)
+	if err != nil {
+		log.Print(err.Error())
+		os.Exit(1)
+	}
 
-	game := NewGame(engine, 720, 720)
+	engine := NewRasterizer(1080, 1080)
+
+	game := NewGame(engine, 1080, 1080, []*Mesh{mesh})
 
 	Run(game)
 }

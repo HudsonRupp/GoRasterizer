@@ -8,14 +8,14 @@ import (
 type Rasterizer struct {
 	Width  int
 	Height int
-	ZBuf   [][]int
+	ZBuf   [][]float64
 }
 
 func NewRasterizer(width int, height int) *Rasterizer {
 
-	zbuf := make([][]int, width)
+	zbuf := make([][]float64, width)
 	for i := range zbuf {
-		zbuf[i] = make([]int, height)
+		zbuf[i] = make([]float64, height)
 	}
 
 	return &Rasterizer{
@@ -42,7 +42,7 @@ func rotate(v Vec3, angle float64) Vec3 {
 
 var angle float64 = 0
 
-func (r *Rasterizer) Render(frame *image.RGBA, cam *Camera) {
+func (r *Rasterizer) Render(frame *image.RGBA, cam *Camera, meshes []*Mesh) {
 
 	// Set to black
 	for i := 0; i < len(frame.Pix); i += 4 {
@@ -52,48 +52,85 @@ func (r *Rasterizer) Render(frame *image.RGBA, cam *Camera) {
 		frame.Pix[i+3] = 255 // Alpha
 	}
 
-	angle += 1
-	if angle == 90 {
-		angle = 270
-	} else if angle == 360 {
-		angle = 0
+	// Reset depth buffer
+	for i := 0; i < len(r.ZBuf); i++ {
+		for j := 0; j < len(r.ZBuf[0]); j++ {
+			r.ZBuf[i][j] = math.Inf(1)
+		}
 	}
 
-	V0 := Vec3{0, 1.5, -5}
-	V1 := Vec3{-1.5, -1.5, -5}
-	V2 := Vec3{1.5, -1.5, -5}
-	c0 := Vec3{1, 0, 0}
-	c1 := Vec3{0, 1, 0}
-	c2 := Vec3{0, 0, 1}
+	viewMat := cam.getCameraMatrix()
 
-	//V0 = rotate(V0, angle)
-	//V1 = rotate(V1, angle)
-	//V2 = rotate(V2, angle)
+	for _, mesh := range meshes {
+		rasterVerts := make([]Vec3, len(mesh.Vertices))
+		viewVerts := make([]Vec3, len(mesh.Vertices))
 
-	p0 := r.worldToRaster(cam, V0)
-	p1 := r.worldToRaster(cam, V1)
-	p2 := r.worldToRaster(cam, V2)
+		for i, v := range mesh.Vertices {
+			viewVerts[i] = viewMat.MultVec3(v)
+			rasterVerts[i] = r.worldToRaster(cam, v)
+		}
 
-	// maxY := math.Max(p0.Y, math.Max(p1.Y, p2.Y))
-	// minY := math.Min(p0.Y, math.Min(p1.Y, p2.Y))
-	// maxX := math.Max(p0.X, math.Max(p1.X, p2.X))
-	// minX := math.Min(p0.X, math.Min(p1.X, p2.X))
+		for _, face := range mesh.Faces {
+			// z culling
+			if viewVerts[face[0]].Z >= 0 || viewVerts[face[1]].Z >= 0 || viewVerts[face[2]].Z >= 0 {
+				continue
+			}
 
-	// y := 0; y < frame.Rect.Dy(); y++
-	//for y := int(minY); y < int(maxY); y++ {
-	for y := 0; y < frame.Rect.Dy(); y++ {
-		//for x := int(minX); x < int(maxX); x++ {
-		for x := 0; x < frame.Rect.Dx(); x++ {
-			p := Vec3{X: float64(x) + .5, Y: float64(y) + .5} // middle of pixel
-			inTriangle, w0, w1, w2 := r.pointInTriangle(p0, p1, p2, p)
-			if inTriangle {
-				red := w0*c0.X + w1*c1.X + w2*c2.X
-				green := w0*c0.Y + w1*c1.Y + w2*c2.Y
-				blue := w0*c0.Z + w1*c1.Z + w2*c2.Z
-				r.setPixel(frame, x, y, Vec3{red, green, blue})
+			p0 := rasterVerts[face[0]]
+			p1 := rasterVerts[face[1]]
+			p2 := rasterVerts[face[2]]
+
+			// view space depths for zbuf
+			z0 := -viewVerts[face[0]].Z
+			z1 := -viewVerts[face[1]].Z
+			z2 := -viewVerts[face[2]].Z
+
+			// Test colors to better see individual triangles
+			c0 := Vec3{1, 0, 0}
+			c1 := Vec3{0, 1, 0}
+			c2 := Vec3{0, 0, 1}
+
+			// Bounding box
+			maxY := int(math.Ceil(math.Max(p0.Y, math.Max(p1.Y, p2.Y))))
+			minY := int(math.Floor(math.Min(p0.Y, math.Min(p1.Y, p2.Y))))
+			maxX := int(math.Ceil(math.Max(p0.X, math.Max(p1.X, p2.X))))
+			minX := int(math.Floor(math.Min(p0.X, math.Min(p1.X, p2.X))))
+
+			if minX < 0 {
+				minX = 0
+			}
+			if minY < 0 {
+				minY = 0
+			}
+			if maxX > frame.Rect.Dx() {
+				maxX = frame.Rect.Dx()
+			}
+			if maxY > frame.Rect.Dy() {
+				maxY = frame.Rect.Dy()
+			}
+
+			for y := int(minY); y < int(maxY); y++ {
+				for x := int(minX); x < int(maxX); x++ {
+					p := Vec3{X: float64(x) + .5, Y: float64(y) + .5} // middle of pixel
+					inTriangle, w0, w1, w2 := r.pointInTriangle(p0, p1, p2, p)
+					if inTriangle {
+
+						inverseZ := w0*(1.0/z0) + w1*(1.0/z1) + w2*(1.0/z2)
+						z := 1.0 / inverseZ
+						if z < r.ZBuf[x][y] {
+							r.ZBuf[x][y] = z
+
+							red := w0*c0.X + w1*c1.X + w2*c2.X
+							green := w0*c0.Y + w1*c1.Y + w2*c2.Y
+							blue := w0*c0.Z + w1*c1.Z + w2*c2.Z
+							r.setPixel(frame, x, y, Vec3{red, green, blue})
+						}
+					}
+				}
 			}
 		}
 	}
+
 }
 
 func (r *Rasterizer) setPixel(frame *image.RGBA, x int, y int, color Vec3) {
