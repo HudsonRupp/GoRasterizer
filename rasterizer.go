@@ -8,21 +8,38 @@ import (
 type Rasterizer struct {
 	Width  int
 	Height int
-	ZBuf   [][]float64
+	ZBuf   []float64
+
+	viewBuf    []Vec3
+	rasterBuf  []Vec3
+	blankFrame []byte
 }
 
 func NewRasterizer(width int, height int) *Rasterizer {
 
-	zbuf := make([][]float64, width)
-	for i := range zbuf {
-		zbuf[i] = make([]float64, height)
+	zbuf := make([]float64, width*height)
+	blank := make([]byte, width*height*4)
+	for i := 0; i < len(blank); i += 4 {
+		blank[i+3] = 255
 	}
 
 	return &Rasterizer{
-		Width:  width,
-		Height: height,
-		ZBuf:   zbuf,
+		Width:      width,
+		Height:     height,
+		ZBuf:       zbuf,
+		viewBuf:    make([]Vec3, 0, 1000),
+		rasterBuf:  make([]Vec3, 1000),
+		blankFrame: blank,
 	}
+}
+
+func (r *Rasterizer) ensureBufSize(needed int) {
+	if cap(r.viewBuf) < needed {
+		r.viewBuf = make([]Vec3, needed)
+		r.rasterBuf = make([]Vec3, needed)
+	}
+	r.viewBuf = r.viewBuf[:needed]
+	r.rasterBuf = r.rasterBuf[:needed]
 }
 
 func rotate(v Vec3, angle float64) Vec3 {
@@ -44,46 +61,44 @@ var angle float64 = 0
 
 func (r *Rasterizer) Render(frame *image.RGBA, cam *Camera, meshes []*Mesh) {
 
-	// Set to black
-	for i := 0; i < len(frame.Pix); i += 4 {
-		frame.Pix[i] = 0     //R
-		frame.Pix[i+1] = 0   //G
-		frame.Pix[i+2] = 0   //B
-		frame.Pix[i+3] = 255 // Alpha
-	}
+	// Reset frame
+	copy(frame.Pix, r.blankFrame)
 
 	// Reset depth buffer
 	for i := 0; i < len(r.ZBuf); i++ {
-		for j := 0; j < len(r.ZBuf[0]); j++ {
-			r.ZBuf[i][j] = math.Inf(1)
-		}
+		r.ZBuf[i] = math.Inf(1)
 	}
 
 	viewMat := cam.getCameraMatrix()
 
 	for _, mesh := range meshes {
-		rasterVerts := make([]Vec3, len(mesh.Vertices))
-		viewVerts := make([]Vec3, len(mesh.Vertices))
+		r.ensureBufSize(len(mesh.Vertices))
 
 		for i, v := range mesh.Vertices {
-			viewVerts[i] = viewMat.MultVec3(v)
-			rasterVerts[i] = r.worldToRaster(cam, v)
+			r.viewBuf[i] = viewMat.MultVec3(v)
+			r.rasterBuf[i] = r.worldToRaster(cam, v)
 		}
 
 		for _, face := range mesh.Faces {
 			// z culling
-			if viewVerts[face[0]].Z >= 0 || viewVerts[face[1]].Z >= 0 || viewVerts[face[2]].Z >= 0 {
+			if r.viewBuf[face[0]].Z >= 0 || r.viewBuf[face[1]].Z >= 0 || r.viewBuf[face[2]].Z >= 0 {
 				continue
 			}
 
-			p0 := rasterVerts[face[0]]
-			p1 := rasterVerts[face[1]]
-			p2 := rasterVerts[face[2]]
+			p0 := r.rasterBuf[face[0]]
+			p1 := r.rasterBuf[face[1]]
+			p2 := r.rasterBuf[face[2]]
+
+			// back face culling - based on winding relative to camera in raster space
+			area := r.edgeFunction(p0, p1, p2)
+			if area <= 0 {
+				continue
+			}
 
 			// view space depths for zbuf
-			z0 := -viewVerts[face[0]].Z
-			z1 := -viewVerts[face[1]].Z
-			z2 := -viewVerts[face[2]].Z
+			z0 := -r.viewBuf[face[0]].Z
+			z1 := -r.viewBuf[face[1]].Z
+			z2 := -r.viewBuf[face[2]].Z
 
 			// Test colors to better see individual triangles
 			c0 := Vec3{1, 0, 0}
@@ -117,8 +132,8 @@ func (r *Rasterizer) Render(frame *image.RGBA, cam *Camera, meshes []*Mesh) {
 
 						inverseZ := w0*(1.0/z0) + w1*(1.0/z1) + w2*(1.0/z2)
 						z := 1.0 / inverseZ
-						if z < r.ZBuf[x][y] {
-							r.ZBuf[x][y] = z
+						if z < r.ZBuf[y*r.Width+x] {
+							r.ZBuf[y*r.Width+x] = z
 
 							red := w0*c0.X + w1*c1.X + w2*c2.X
 							green := w0*c0.Y + w1*c1.Y + w2*c2.Y

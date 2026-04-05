@@ -61,6 +61,10 @@ func (v Vec3) Normalized() Vec3 {
 	return Vec3{X: v.X / m, Y: v.Y / m, Z: v.Z / m}
 }
 
+func (v Vec3) Dot(o Vec3) float64 {
+	return v.X*o.X + v.Y + o.Y*v.Z*o.Z
+}
+
 func (v Vec3) Cross(o Vec3) Vec3 {
 	return Vec3{X: v.Y*o.Z - v.Z*o.Y,
 		Y: v.Z*o.X - v.X*o.Z,
@@ -73,4 +77,12 @@ func (v Vec3) Sub(o Vec3) Vec3 {
 
 func (v Vec3) Add(o Vec3) Vec3 {
 	return Vec3{X: v.X + o.X, Y: v.Y + o.Y, Z: v.Z + o.Z}
+}
+
+func (v Vec3) ScalarMult(k float64) Vec3 {
+	return Vec3{X: v.X * k, Y: v.Y * k, Z: v.Z * k}
+}
+
+func FaceNormal(a Vec3, b Vec3, c Vec3) Vec3 {
+	return (b.Sub(a)).Cross((c.Sub(a))).Normalized()
 }

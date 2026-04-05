@@ -34,46 +34,47 @@ func NewGame(r *Rasterizer, width int, height int, meshes []*Mesh) *Game {
 func (g *Game) Update() error {
 	moved := false
 	translateSpeed := 0.1
-	/*
-		rotateSpeed := 2.0 // deg/frame
 
-		//Rotation
-		if ebiten.IsKeyPressed(ebiten.KeyLeft) {
-			g.camera.Rotate(-rotateSpeed, 0)
-			moved = true
-		}
-		if ebiten.IsKeyPressed(ebiten.KeyRight) {
-			g.camera.Rotate(rotateSpeed, 0)
-			moved = true
-		}
-		if ebiten.IsKeyPressed(ebiten.KeyUp) {
-			g.camera.Rotate(0, rotateSpeed)
-			moved = true
-		}
-		if ebiten.IsKeyPressed(ebiten.KeyDown) {
-			g.camera.Rotate(0, rotateSpeed)
-			moved = true
-		}
+	rotateSpeed := 2.0 // deg/frame
 
-		forward := g.camera.Target.Sub(g.camera.Position).Normalized()
-		right := (Vec3{X: 0, Y: 1, Z: 0}).Cross(forward).Normalized()
-	*/
+	//Rotation
+	if ebiten.IsKeyPressed(ebiten.KeyLeft) {
+		g.camera.Rotate(-rotateSpeed, 0)
+		moved = true
+	}
+	if ebiten.IsKeyPressed(ebiten.KeyRight) {
+		g.camera.Rotate(rotateSpeed, 0)
+		moved = true
+	}
+	if ebiten.IsKeyPressed(ebiten.KeyUp) {
+		g.camera.Rotate(0, rotateSpeed)
+		moved = true
+	}
+	if ebiten.IsKeyPressed(ebiten.KeyDown) {
+		g.camera.Rotate(0, -rotateSpeed)
+		moved = true
+	}
+
+	forward := g.camera.Target.Sub(g.camera.Position).Normalized()
+	right := (Vec3{X: 0, Y: 1, Z: 0}).Cross(forward).Normalized()
+	dForward := Vec3{forward.X * translateSpeed, forward.Y * translateSpeed, forward.Z * translateSpeed}
+	dRight := Vec3{right.X * translateSpeed, right.Y * translateSpeed, right.Z * translateSpeed}
 
 	//Translation
 	if ebiten.IsKeyPressed(ebiten.KeyW) {
-		g.camera.Translate(Vec3{0, 0, -translateSpeed})
+		g.camera.Translate(dForward)
 		moved = true
 	}
 	if ebiten.IsKeyPressed(ebiten.KeyA) {
-		g.camera.Translate(Vec3{-translateSpeed, 0, 0})
+		g.camera.Translate(dRight)
 		moved = true
 	}
 	if ebiten.IsKeyPressed(ebiten.KeyS) {
-		g.camera.Translate(Vec3{0, 0, translateSpeed})
+		g.camera.Translate(dForward.ScalarMult(-1))
 		moved = true
 	}
 	if ebiten.IsKeyPressed(ebiten.KeyD) {
-		g.camera.Translate(Vec3{translateSpeed, 0, 0})
+		g.camera.Translate(dRight.ScalarMult(-1))
 		moved = true
 	}
 	if ebiten.IsKeyPressed(ebiten.KeyQ) {
