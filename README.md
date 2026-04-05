@@ -19,4 +19,7 @@ go run . obj/teapot.obj
 - Use arrow keys to change the direction of the camera
 
 ## Preview
+
+<img width="1074" height="773" alt="rendercat" src="https://github.com/user-attachments/assets/ba04dcb7-1b73-4eca-ba79-51043fd40114" />
+
 <img width="828" height="716" alt="image" src="https://github.com/user-attachments/assets/22a59233-8e00-4fdc-affd-bf1b41201f0d" />
