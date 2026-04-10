@@ -86,3 +86,7 @@ func (v Vec3) ScalarMult(k float64) Vec3 {
 func FaceNormal(a Vec3, b Vec3, c Vec3) Vec3 {
 	return (b.Sub(a)).Cross((c.Sub(a))).Normalized()
 }
+
+type Vec2 struct {
+	X, Y float64
+}
