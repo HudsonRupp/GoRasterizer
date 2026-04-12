@@ -21,7 +21,22 @@ func main() {
 	log.SetOutput(f)
 	log.Println("Starting...")
 
-	sceneName := os.Args[1]
+	var sceneName string
+	if len(os.Args) > 1 {
+		sceneName = os.Args[1]
+	} else {
+		sceneName = "obj/blank"
+		folders := []string{"mesh", "texture", "skybox"}
+		for _, folder := range folders {
+			dirPath := filepath.Join(sceneName, folder)
+
+			err := os.MkdirAll(dirPath, 0755)
+			if err != nil {
+				log.Printf("Error creating blank scene folders: %v", err)
+				continue
+			}
+		}
+	}
 
 	meshDir := filepath.Join(sceneName, "mesh")
 	texDir := filepath.Join(sceneName, "texture")
