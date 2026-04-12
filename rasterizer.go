@@ -10,8 +10,11 @@ type Rasterizer struct {
 	Height int
 	ZBuf   []float64
 
-	viewBuf    []Vec3
-	rasterBuf  []Vec3
+	//TODO: consider separate struct for vertex-related buffers
+	viewBuf   []Vec3
+	rasterBuf []Vec3
+	uvBuf     []Vec2
+
 	blankFrame []byte
 }
 
@@ -20,6 +23,9 @@ func NewRasterizer(width int, height int) *Rasterizer {
 	zbuf := make([]float64, width*height)
 	blank := make([]byte, width*height*4)
 	for i := 0; i < len(blank); i += 4 {
+		blank[i] = 100
+		blank[i+1] = 100
+		blank[i+2] = 100
 		blank[i+3] = 255
 	}
 
@@ -29,6 +35,7 @@ func NewRasterizer(width int, height int) *Rasterizer {
 		ZBuf:       zbuf,
 		viewBuf:    make([]Vec3, 0, 1000),
 		rasterBuf:  make([]Vec3, 1000),
+		uvBuf:      make([]Vec2, 1000),
 		blankFrame: blank,
 	}
 }
@@ -37,9 +44,11 @@ func (r *Rasterizer) ensureBufSize(needed int) {
 	if cap(r.viewBuf) < needed {
 		r.viewBuf = make([]Vec3, needed)
 		r.rasterBuf = make([]Vec3, needed)
+		r.uvBuf = make([]Vec2, needed)
 	}
 	r.viewBuf = r.viewBuf[:needed]
 	r.rasterBuf = r.rasterBuf[:needed]
+	r.uvBuf = r.uvBuf[:needed]
 }
 
 func rotate(v Vec3, angle float64) Vec3 {
@@ -75,8 +84,9 @@ func (r *Rasterizer) Render(frame *image.RGBA, cam *Camera, meshes []*Mesh) {
 		r.ensureBufSize(len(mesh.Vertices))
 
 		for i, v := range mesh.Vertices {
-			r.viewBuf[i] = viewMat.MultVec3(v)
-			r.rasterBuf[i] = r.worldToRaster(cam, v)
+			r.viewBuf[i] = viewMat.MultVec3(v.Position)
+			r.rasterBuf[i] = r.worldToRaster(cam, v.Position)
+			r.uvBuf[i] = v.UV
 		}
 
 		for _, face := range mesh.Faces {
@@ -91,7 +101,7 @@ func (r *Rasterizer) Render(frame *image.RGBA, cam *Camera, meshes []*Mesh) {
 
 			// back face culling - based on winding relative to camera in raster space
 			area := r.edgeFunction(p0, p1, p2)
-			if area <= 0 {
+			if area <= 0 && !mesh.IsSky {
 				continue
 			}
 
@@ -100,10 +110,10 @@ func (r *Rasterizer) Render(frame *image.RGBA, cam *Camera, meshes []*Mesh) {
 			z1 := -r.viewBuf[face[1]].Z
 			z2 := -r.viewBuf[face[2]].Z
 
-			// Test colors to better see individual triangles
-			c0 := Vec3{1, 0, 0}
-			c1 := Vec3{0, 1, 0}
-			c2 := Vec3{0, 0, 1}
+			//UV
+			uv0 := r.uvBuf[face[0]]
+			uv1 := r.uvBuf[face[1]]
+			uv2 := r.uvBuf[face[2]]
 
 			// Bounding box
 			maxY := int(math.Ceil(math.Max(p0.Y, math.Max(p1.Y, p2.Y))))
@@ -130,15 +140,25 @@ func (r *Rasterizer) Render(frame *image.RGBA, cam *Camera, meshes []*Mesh) {
 					inTriangle, w0, w1, w2 := r.pointInTriangle(p0, p1, p2, p)
 					if inTriangle {
 
+						// Perspective-correct Z
 						inverseZ := w0*(1.0/z0) + w1*(1.0/z1) + w2*(1.0/z2)
-						z := 1.0 / inverseZ
-						if z < r.ZBuf[y*r.Width+x] {
-							r.ZBuf[y*r.Width+x] = z
+						pixelZ := 1.0 / inverseZ
 
-							red := w0*c0.X + w1*c1.X + w2*c2.X
-							green := w0*c0.Y + w1*c1.Y + w2*c2.Y
-							blue := w0*c0.Z + w1*c1.Z + w2*c2.Z
-							r.setPixel(frame, x, y, Vec3{red, green, blue})
+						// Perspective-correct UV interpolation TODO: review this
+						uvX := pixelZ * (w0*(uv0.X/z0) + w1*(uv1.X/z1) + w2*(uv2.X/z2))
+						uvY := pixelZ * (w0*(uv0.Y/z0) + w1*(uv1.Y/z1) + w2*(uv2.Y/z2))
+
+						if mesh.IsSky || pixelZ < r.ZBuf[y*r.Width+x] {
+							if !mesh.IsSky {
+								r.ZBuf[y*r.Width+x] = pixelZ
+							}
+							if mesh.Texture != nil {
+								r.setPixel(frame, x, y, mesh.Texture.Sample(uvX, uvY))
+							} else if mesh.IsSky {
+								r.setPixel(frame, x, y, SampleTexture(uvX, uvY))
+							} else {
+								r.setPixel(frame, x, y, SampleTexture(uvX, uvY))
+							}
 						}
 					}
 				}
@@ -211,9 +231,10 @@ func (ras *Rasterizer) edgeFunction(v1, v2, p Vec3) float64 {
 
 func (r *Rasterizer) pointInTriangle(V0, V1, V2, p Vec3) (bool, float64, float64, float64) {
 	area := r.edgeFunction(V0, V1, V2)
-	w0 := r.edgeFunction(V0, V1, p)
-	w1 := r.edgeFunction(V1, V2, p)
-	w2 := r.edgeFunction(V2, V0, p)
+
+	w0 := r.edgeFunction(V1, V2, p)
+	w1 := r.edgeFunction(V2, V0, p)
+	w2 := r.edgeFunction(V0, V1, p)
 
 	if w0 >= 0 && w1 >= 0 && w2 >= 0 {
 		w0 /= area
