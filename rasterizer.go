@@ -101,7 +101,7 @@ func (r *Rasterizer) Render(frame *image.RGBA, cam *Camera, meshes []*Mesh) {
 
 			// back face culling - based on winding relative to camera in raster space
 			area := r.edgeFunction(p0, p1, p2)
-			if area <= 0 {
+			if area <= 0 && !mesh.IsSky {
 				continue
 			}
 
@@ -114,13 +114,6 @@ func (r *Rasterizer) Render(frame *image.RGBA, cam *Camera, meshes []*Mesh) {
 			uv0 := r.uvBuf[face[0]]
 			uv1 := r.uvBuf[face[1]]
 			uv2 := r.uvBuf[face[2]]
-
-			// Test colors to better see individual triangles
-			/*
-				c0 := Vec3{1, 0, 0}
-				c1 := Vec3{0, 1, 0}
-				c2 := Vec3{0, 0, 1}
-			*/
 
 			// Bounding box
 			maxY := int(math.Ceil(math.Max(p0.Y, math.Max(p1.Y, p2.Y))))
@@ -146,6 +139,7 @@ func (r *Rasterizer) Render(frame *image.RGBA, cam *Camera, meshes []*Mesh) {
 					p := Vec3{X: float64(x) + .5, Y: float64(y) + .5} // middle of pixel
 					inTriangle, w0, w1, w2 := r.pointInTriangle(p0, p1, p2, p)
 					if inTriangle {
+
 						// Perspective-correct Z
 						inverseZ := w0*(1.0/z0) + w1*(1.0/z1) + w2*(1.0/z2)
 						pixelZ := 1.0 / inverseZ
@@ -153,19 +147,18 @@ func (r *Rasterizer) Render(frame *image.RGBA, cam *Camera, meshes []*Mesh) {
 						// Perspective-correct UV interpolation TODO: review this
 						uvX := pixelZ * (w0*(uv0.X/z0) + w1*(uv1.X/z1) + w2*(uv2.X/z2))
 						uvY := pixelZ * (w0*(uv0.Y/z0) + w1*(uv1.Y/z1) + w2*(uv2.Y/z2))
-						uv := Vec2{uvX, uvY}
 
-						if pixelZ < r.ZBuf[y*r.Width+x] {
-							r.ZBuf[y*r.Width+x] = pixelZ
-
-							/*
-								red := w0*c0.X + w1*c1.X + w2*c2.X
-								green := w0*c0.Y + w1*c1.Y + w2*c2.Y
-								blue := w0*c0.Z + w1*c1.Z + w2*c2.Z
-							*/
-							// sampleTex(uv.X, uv.Y, ...)
-
-							r.setPixel(frame, x, y, SampleTexture(uv.X, uv.Y))
+						if mesh.IsSky || pixelZ < r.ZBuf[y*r.Width+x] {
+							if !mesh.IsSky {
+								r.ZBuf[y*r.Width+x] = pixelZ
+							}
+							if mesh.Texture != nil {
+								r.setPixel(frame, x, y, mesh.Texture.Sample(uvX, uvY))
+							} else if mesh.IsSky {
+								r.setPixel(frame, x, y, SampleTexture(uvX, uvY))
+							} else {
+								r.setPixel(frame, x, y, SampleTexture(uvX, uvY))
+							}
 						}
 					}
 				}
@@ -238,9 +231,10 @@ func (ras *Rasterizer) edgeFunction(v1, v2, p Vec3) float64 {
 
 func (r *Rasterizer) pointInTriangle(V0, V1, V2, p Vec3) (bool, float64, float64, float64) {
 	area := r.edgeFunction(V0, V1, V2)
-	w0 := r.edgeFunction(V0, V1, p)
-	w1 := r.edgeFunction(V1, V2, p)
-	w2 := r.edgeFunction(V2, V0, p)
+
+	w0 := r.edgeFunction(V1, V2, p)
+	w1 := r.edgeFunction(V2, V0, p)
+	w2 := r.edgeFunction(V0, V1, p)
 
 	if w0 >= 0 && w1 >= 0 && w2 >= 0 {
 		w0 /= area
