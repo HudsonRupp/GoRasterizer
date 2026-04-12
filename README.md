@@ -1,6 +1,6 @@
 # GoRasterizer
 
-3D Rasterizer from scratch in Go.
+3D Rasterizer in Go
 
 ## Execution 
 
