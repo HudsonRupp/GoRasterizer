@@ -25,4 +25,6 @@ To import custom objects:
 - Use arrow keys to change the direction of the camera
 
 ## Preview
+<img width="1796" height="1005" alt="image" src="https://github.com/user-attachments/assets/e6057826-9f05-4ff8-9b87-589fd8acfd6d" />
+
 <img width="828" height="716" alt="image" src="https://github.com/user-attachments/assets/22a59233-8e00-4fdc-affd-bf1b41201f0d" />
